@@ -1,7 +1,7 @@
-Steve Arbogast
-525.752
-Header build for 802.15.3d sub-THz SC
-See Fig 13-6
+% Steve Arbogast
+% 525.752
+% Header build for 802.15.3d sub-THz SC
+% See Fig 13-6
 
 clear;close all
 %%
