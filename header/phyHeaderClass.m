@@ -60,5 +60,22 @@ classdef phyHeaderClass < handle
             %% convert a binary/dec/hex val to the LSB first bit array 
             % do this later
         end
+
+        function reset(obj)
+            defaultObj = macHeaderClass();
+            % propMeta = obj.findprop(propName);
+            % meta = ?phyHeaderClass;
+            % propMeta = meta.PropertyList;
+            defaultStruct = struct(defaultObj);
+            fields = fieldnames(defaultStruct);
+            for i = 1:length(fields)
+                propMeta = obj.findprop(fields{i});
+                 % do not set frames directly 
+                if ~strcmp(propMeta.SetAccess, 'private')
+                    obj.(fields{i}) = defaultStruct.(fields{i});
+                end
+            end
+            obj.updateHeader();
+        end
     end
 end
