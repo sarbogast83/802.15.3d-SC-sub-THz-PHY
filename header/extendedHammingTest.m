@@ -13,6 +13,9 @@ Pmat = [1 1 0 1;...
 Gmat = [I4 Pmat]; % [I P]
 Hmat = [Pmat' I4]; % [P^T I]
 
+dataLength = 4*10;
+testData = randi([0 1],1,dataLength);
+endcodedBits = extendedHamming(testData,Gmat);
 
 function encodedBits = extendedHamming(dataBits,Gmat)
     dataBits = dataBits(:); % column vector
@@ -26,9 +29,14 @@ function encodedBits = extendedHamming(dataBits,Gmat)
     
     for b = 0:numBlocks-1
         blockData = paddedData(b*4 + (1:4));
-        encodedBlock = mod(blockData' * G, 2);
+        encodedBlock = mod(blockData' * Gmat, 2);
         encodedBits(b*8 + (1:8)) = encodedBlock';
     end
+
+    bitMatrix = reshape(paddedData,4,[]); %nx4
+    encodedBitsM = mod(bitMatrix'*Gmat,2); % * will do linear matrix multi
+    encodedBitsVec = reshape(encodedBitsM',[],1); % back to column *** the trnaspose ***
+    sum(encodedBitsVec ~= encodedBits)
 end
 
 %% fucntion to decode 
