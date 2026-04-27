@@ -75,16 +75,11 @@ classdef headerEngine
             padLen = mod(4 - mod(length(dataBits), 4), 4);
             paddedData = [dataBits; zeros(padLen, 1)];
             
-            numBlocks = length(paddedData) / 4;
-            encodedBits = zeros(numBlocks * 8, 1);
+            bitMatrix = reshape(paddedData,4,[]); %nx4
+            encodedBitsM = mod(bitMatrix'*Gmat,2); % * will do linear matrix multi
+            encodedBitsVec = reshape(encodedBitsM',[],1);% not the transpose for this to work
             
-            for n = 0:numBlocks-1
-                blockData = paddedData(n*4 + (1:4));
-                encodedBlock = mod(blockData' * G, 2);
-                encodedBits(n*8 + (1:8)) = encodedBlock';
-            end
-            
-            obj.fullHeader = encodedBits;
+            obj.fullHeader = encodedBitsVec;
         end % exteneded hamming  
     end
 end
