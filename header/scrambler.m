@@ -6,11 +6,22 @@ clear; close
 %% 
 scramblerSeedID = [0 0 0 0]; %this is a rollling counter
                             % consider int cnt to bit array later or
-                            % incremet this array
-testData = zeros(1,16);
+testDatalength = 32;                            % incremet this array
+testData = randi([0 1],testDatalength,1);
 scrambledBits = scrambleBits(testData,scramblerSeedID);
+unscrambledBits = scrambleBits(scrambledBits,scramblerSeedID);
+
+% validate
+bitError = (sum(testData ~= unscrambledBits)/testDatalength);
+if bitError == 0
+    disp('Scrabler success!')
+else 
+    warning('scrambler fail %d bit error',bitError)
+end
+
 
 function scrambledBits = scrambleBits(dataBits, scramblerSeedID)
+    %% the scramble and descramble are idenetical, reuse the function for both 
     dataBits = dataBits(:); % work on columns
     scramblerSeedID = scramblerSeedID(:);
 %     testVec =  [0; 0; 0; 1; 1; 1; 1; 0; 0; 0; 1; 1; 1; 0; 1; 0];
@@ -19,7 +30,7 @@ function scrambledBits = scrambleBits(dataBits, scramblerSeedID)
     xInit = [1; 1; 0; 1; 0; 0; 0; 0; 1; 0; 1; scramblerSeedID]; %12-13
     
     scrambledBits = zeros(length(dataBits), 1);
-    for n = 1:16
+    for n = 1:length(dataBits)
 %     for n = 1:length(dataBits)
         xn = xor(xInit(14), xInit(15)); % 12-12
 %         xnTest(n) = xn; 
