@@ -52,11 +52,11 @@ PW = (2*pilotWord-1).*exp(1j*pi/2*n);
 % payloadModulated = (1:56*10).';
 % imageTest = (1j.*(1:56*10)).';
 % payloadModulated = payloadModulated +imageTest;
-BitsMat = reshape(payloadModulated,blockSize,[]).';
-[numRow,numCol] = size(BitsMat);
+symsMat = reshape(payloadModulated,blockSize,[]).';
+[numRow,numCol] = size(symsMat);
 PWMat = repmat(PW,numRow,1);
-BitsMat_PWMat = [BitsMat PWMat];
-payloadBitsBlocked = reshape(BitsMat_PWMat.',[],1);
+symsMat_PWMat = [symsMat PWMat];
+payloadSymsBlocked = reshape(symsMat_PWMat.',[],1);
 
 %% header 
 phyHeaderObj = phyHeaderClass();
@@ -65,12 +65,29 @@ macHeaderObj = macHeaderClass();
 macHeaderFrame = macHeaderObj.MACheader;
 phyHeaderFrame = headerEngine(phyHeaderFrame,macHeaderFrame);
 
+%% preamble
+load('phyShortPreamble.mat');
+
+%% frame
+TxSymFrame = [preambleMod; phyHeaderFrame.fullHeaderSyms; payloadSymsBlocked];
+
+%% pulse Shape 
+% tested in mod>modtestScriptRRC
+sps = 4;
+span = 8;
+rolloff = 0.25;
+RRC = rcosdesign(rolloff,span,sps,"sqrt");
+RRC = RRC / sqrt(sum(RRC.^2));
+RRC_delay = (length(RRC)-1)/2;
+txSymFrameUp = upsample(TxSymFrame,sps);
+txSymFrameRRC = conv(RRC,txSymFrameUp); 
+
 %% Save
-TxWaveform = payloadBitsBlocked;
+
 [filename, folderpath] = uiputfile('*.mat', 'Save Your Variables');
 if ischar(filename)
     fullpath = fullfile(folderpath, filename);
-    save(fullpath, 'TxWaveform','M', 'numPayloadSym','payloadBits','scramblerSeedID');
+    save(fullpath, 'txSymFrameRRC','sps','M', 'numPayloadSym','payloadBits','scramblerSeedID');
 end
 
 
