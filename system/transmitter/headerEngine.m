@@ -1,10 +1,11 @@
-classdef headerEngine
+classdef headerEngine < handle
     % build the full header
 
     properties
         MACHeader
         PHYHeader
-        fullHeader
+        fullHeaderBits
+        fullHeaderSyms
     end
 
     properties (Access= private)
@@ -26,6 +27,7 @@ classdef headerEngine
             obj.headerCheckSequence();
             obj.scrambleMACCRC();
             obj.extendedHamming();
+            obj.modulate();
         end % build
 
         function obj = headerCheckSequence(obj)
@@ -40,7 +42,7 @@ classdef headerEngine
                 'FinalXOR', 1);                 % Inverts the remainder (ones' complement)
             
             crcOut = hcsGen(phyMac);
-            obj.pHCS = crcOut(end-16:end);
+            obj.pHCS = crcOut(end-15:end);
         end % header check sequence
 
         function obj = scrambleMACCRC(obj)
@@ -79,7 +81,15 @@ classdef headerEngine
             encodedBitsM = mod(bitMatrix'*Gmat,2); % * will do linear matrix multi
             encodedBitsVec = reshape(encodedBitsM',[],1);% not the transpose for this to work
             
-            obj.fullHeader = encodedBitsVec;
+            obj.fullHeaderBits = encodedBitsVec;
         end % exteneded hamming  
+
+        function obj = modulate(obj)
+            bits = obj.fullHeaderBits;
+            n = (0:length(bits)-1).';
+            bipolarBits = 2*bits -1;
+            rotatedBits = bipolarBits .*(1j*pi/2*n);
+            obj.fullHeaderSyms = rotatedBits;
+        end % modulate
     end
 end
