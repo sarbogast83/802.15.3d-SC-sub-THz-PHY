@@ -58,8 +58,20 @@ PWMat = repmat(PW,numRow,1);
 BitsMat_PWMat = [BitsMat PWMat];
 payloadBitsBlocked = reshape(BitsMat_PWMat.',[],1);
 
+%% header 
+phyHeaderObj = phyHeaderClass();
+phyHeaderFrame = phyHeaderObj.PHYheader;
+macHeaderObj = macHeaderClass();
+macHeaderFrame = macHeaderObj.MACheader;
+phyHeaderFrame = headerEngine(phyHeaderFrame,macHeaderFrame);
 
-
+%% Save
+TxWaveform = payloadBitsBlocked;
+[filename, folderpath] = uiputfile('*.mat', 'Save Your Variables');
+if ischar(filename)
+    fullpath = fullfile(folderpath, filename);
+    save(fullpath, 'TxWaveform','M', 'numPayloadSym','payloadBits','scramblerSeedID');
+end
 
 
 
