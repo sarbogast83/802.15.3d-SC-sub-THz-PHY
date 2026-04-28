@@ -12,13 +12,19 @@ b_bits = cell2mat(arrayfun(@(c) dec2bin(hex2dec(c), 4), b128_hex, 'UniformOutput
 
 % Ga = 1 - 2*a_bits; 
 % Gb = 1 - 2*b_bits;
-Ga = 2*a_bits - 1; % bipoler direction does not mater 
-Gb = 2*b_bits - 1;
-
-
-y = conv(Ga,flip(Ga));
-x = conv(Gb,flip(Gb));
-perfect_spike = x + y;
+Ga = 2*a_bits(:) - 1; % bipoler direction does not matter 
+Gb = 2*b_bits(:) - 1;
+n = (0:127)';
+GaTx = Ga .*exp(1j*pi/2*n);
+GbTx = Gb .*exp(1j*pi/2*n);
+GaRx = conj(flip(GaTx));
+GbRx = conj(flip(GbTx));
+% y = conv(Ga,flip(Ga));
+% x = conv(Gb,flip(Gb));
+% test pi/2
+y = (conv(GaTx,GaRx));
+x = (conv(GbTx,GbRx));
+perfect_spike = abs(x + y);
 
 % 5. Plotting with precise limits
 figure;
