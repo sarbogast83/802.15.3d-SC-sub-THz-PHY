@@ -43,4 +43,6 @@ CES = flip(CESreveresed); % *** this is in transmit order
 % |SYNC|SFD|CES| fig (13-5)
 
 preamble = [SYNC; SFD; CES];
-save("phyShortPreamble.mat","preamble")
+n = (0:length(preamble)-1)';
+preambleMod = preamble .*exp(1j*pi/2*n);
+save("phyShortPreamble.mat","preambleMod")
