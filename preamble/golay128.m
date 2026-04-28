@@ -30,4 +30,5 @@ perfect_spike = abs(x + y);
 figure;
 plot(perfect_spike, 'LineWidth', 2);
 grid on; 
-
+%%
+save("golay128.mat","Ga","Gb")
