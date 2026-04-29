@@ -10,6 +10,7 @@
 
 
 clear; close all
+addpath('../helper/')
 %% Data
 M = 1; % BPSK
 numPayloadSym = 2048*8;
