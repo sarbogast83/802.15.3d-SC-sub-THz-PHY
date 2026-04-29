@@ -5,6 +5,7 @@ classdef headerEngine < handle
         MACHeader
         PHYHeader
         fullHeaderBits
+        fullHeaderSpreadBits
         fullHeaderSyms
     end
 
@@ -12,6 +13,7 @@ classdef headerEngine < handle
         pScramblerSeedID = [ 0; 0; 0; 0]
         pHCS 
         pScrambledMACHCS 
+        pStuffBits
     end 
 
     methods
@@ -27,7 +29,10 @@ classdef headerEngine < handle
             obj.headerCheckSequence();
             obj.scrambleMACCRC();
             obj.extendedHamming();
+            obj.stuffBits();
+            obj.spreadCode();
             obj.modulate();
+            obj.blockBuilder();
         end % build
 
         function obj = headerCheckSequence(obj)
@@ -84,12 +89,45 @@ classdef headerEngine < handle
             obj.fullHeaderBits = encodedBitsVec;
         end % exteneded hamming  
 
+        function obj = stuffBits(obj)
+            size = 40; % hardcoded see table (14-7)
+            obj.pStuffBits = zeros(size,1);
+            obj.fullHeaderBits = [obj.fullHeaderBits; obj.pStuffBits];
+        end % stuff bits
+
+        function obj = spreadCode(obj)
+            code0 = 1010;
+            code1 = 0101;
+            SF = 4; % spreading factor
+
+            word = obj.fullHeaderBits;
+            wordLength = length(word);
+            codeWordLength = wordLength * SF;
+            codeWord = zeros(1,codeWordLength);
+        
+            
+            for i = 1:codeWordLength
+                startIDX = (i-1)*SF + 1;
+                endIDX = startIDX + SF - 1;
+                if word(i) == 0 
+                    codeWord(startIDX:endIDX) = code0;
+                else
+                    codeWord(startIDX:endIDX) = code1;
+                end  
+            end
+            obj.fullHeaderSpreadBits;
+        end % spreader 
+
         function obj = modulate(obj)
-            bits = obj.fullHeaderBits;
+            bits = obj.fullHeaderSpreadBits;
             n = (0:length(bits)-1).';
             bipolarBits = 2*bits -1;
             rotatedBits = bipolarBits .*(1j*pi/2*n);
             obj.fullHeaderSyms = rotatedBits;
         end % modulate
+
+        function obj = blockBuilder(obj)
+
+        end % block builder
     end
 end
