@@ -7,6 +7,7 @@ classdef headerEngine < handle
         fullHeaderBits
         fullHeaderSpreadBits
         fullHeaderSyms
+        frameSymsBlocked
     end
 
     properties (Access= private)
@@ -127,7 +128,31 @@ classdef headerEngine < handle
         end % modulate
 
         function obj = blockBuilder(obj)
+            % table (14-7)
+            numBLock = 19;
+            blockSize = 64;
+            PWsize = 8;
+            wordSize = blockSize- PWsize;
 
+            frameModulated = obj.fullHeaderSyms;
+            if length(frameModulated) ~= (numBLock * wordSize)
+                warning('Header Size incorrect')
+                numError = (numBLock * wordSize) - length(frameModulated);
+                padding = zeros(numError,1);
+                frameModulated = [frameModulated; padding];
+                warning('Header padded %d zeros',numError);
+            end
+
+            pilotWord = [1 1 0 1 0 1 1 1]; %0xEB
+            n = 0:7;
+            PW = (2*pilotWord-1).*exp(1j*pi/2*n);
+            symsMat = reshape(frameModulated,blockSize,[]).';
+            [numRow,numCol] = size(symsMat);
+            PWMat = repmat(PW,numRow,1);
+            symsMat_PWMat = [symsMat PWMat];
+            frameSymsBlocked = reshape(symsMat_PWMat.',[],1);
+
+            obj.frameSymsBlocked = frameSymsBlocked; 
         end % block builder
     end
 end
