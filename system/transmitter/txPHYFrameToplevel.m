@@ -13,7 +13,8 @@ clear; close all
 addpath('../helper/')
 %% Data
 M = 1; % BPSK
-numPayloadSym = 2048*8;
+numBits = 2^14 * 8; % test value 2^14 octets 
+numPayloadSym = numBits / M; 
 payloadBits = randi([0 1],numPayloadSym*M,1);
 numPayloadBits = length(payloadBits); 
 %% scramble data
@@ -56,8 +57,9 @@ PW = (2*pilotWord-1).*exp(1j*pi/2*n);
 symsMat = reshape(payloadModulated,blockSize,[]).';
 [numRow,numCol] = size(symsMat);
 PWMat = repmat(PW,numRow,1);
-symsMat_PWMat = [symsMat PWMat];
+symsMat_PWMat = [PWMat symsMat ];
 payloadSymsBlocked = reshape(symsMat_PWMat.',[],1);
+payloadSymsBlocked = [payloadSymsBlocked; PW.']; % append one PW to end
 
 %% header 
 phyHeaderObj = phyHeaderClass();
@@ -70,7 +72,7 @@ phyHeaderFrame = headerEngine(phyHeaderFrame,macHeaderFrame);
 load('phyShortPreamble.mat');
 
 %% frame
-TxSymFrame = [preambleMod; phyHeaderFrame.fullHeaderSyms; payloadSymsBlocked];
+TxSymFrame = [preambleMod; phyHeaderFrame.frameSymsBlocked; payloadSymsBlocked];
 
 %% pulse Shape 
 % tested in mod>modtestScriptRRC

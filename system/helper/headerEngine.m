@@ -104,19 +104,21 @@ classdef headerEngine < handle
             word = obj.fullHeaderBits;
             wordLength = length(word);
             codeWordLength = wordLength * SF;
-            codeWord = zeros(1,codeWordLength);
+            codeWord = zeros(codeWordLength,1);
         
             
-            for i = 1:codeWordLength
-                startIDX = (i-1)*SF + 1;
-                endIDX = startIDX + SF - 1;
+            for i = 1:wordLength
+                % startIDX = (i-1)*SF + 1;
+                % endIDX = startIDX + SF - 1;
+                idx = SF*(i-1) + (1:SF)';
                 if word(i) == 0 
-                    codeWord(startIDX:endIDX) = code0;
+                    codeWord(idx) = code0;
                 else
-                    codeWord(startIDX:endIDX) = code1;
+                    codeWord(idx) = code1;
                 end  
             end
-            obj.fullHeaderSpreadBits;
+
+            obj.fullHeaderSpreadBits = codeWord;
         end % spreader 
 
         function obj = modulate(obj)
@@ -128,30 +130,27 @@ classdef headerEngine < handle
         end % modulate
 
         function obj = blockBuilder(obj)
-            % table (14-7)
-            numBLock = 19;
             blockSize = 64;
             PWsize = 8;
             wordSize = blockSize- PWsize;
 
             frameModulated = obj.fullHeaderSyms;
-            if length(frameModulated) ~= (numBLock * wordSize)
-                warning('Header Size incorrect')
-                numError = (numBLock * wordSize) - length(frameModulated);
-                padding = zeros(numError,1);
-                frameModulated = [frameModulated; padding];
-                warning('Header padded %d zeros',numError);
-            end
+
+            
+            paddingSize = wordSize - mod(length(frameModulated),wordSize);
+            padding = zeros(paddingSize,1);
+            frameModulated = [frameModulated; padding];
+               
 
             pilotWord = [1 1 0 1 0 1 1 1]; %0xEB
             n = 0:7;
             PW = (2*pilotWord-1).*exp(1j*pi/2*n);
-            symsMat = reshape(frameModulated,blockSize,[]).';
+            symsMat = reshape(frameModulated,wordSize,[]).';
             [numRow,numCol] = size(symsMat);
             PWMat = repmat(PW,numRow,1);
-            symsMat_PWMat = [symsMat PWMat];
+            symsMat_PWMat = [PWMat symsMat ];
             frameSymsBlocked = reshape(symsMat_PWMat.',[],1);
-
+            frameSymsBlocked = [frameSymsBlocked; PW.']; % add PW to end
             obj.frameSymsBlocked = frameSymsBlocked; 
         end % block builder
     end
