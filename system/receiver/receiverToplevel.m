@@ -4,13 +4,27 @@
 clear; close all
 %% init 
 addpath("testWaveforms\")
+addpath('filters\')
 load('testWaveforms\TXtestSig1.mat') % this will load all need params
+Rchip = 1760e6;
+Tchip = 1/Rchip;
+
+FSample = Rchip * sps;
+Tsample = 1/FSample;
 
 %% noise/channel
 % apply here
 CNR = 10;  % dB  
-
+rxReceive = txSymFrameRRC;
 %% recovery 
+% RRC 
+load('RRCfitler.mat')
+rxReceiveMatch = conv(rxReceive,RRC.h);
+% still at sps = 4
+
+%% frame detector
+
+
 
 
 
