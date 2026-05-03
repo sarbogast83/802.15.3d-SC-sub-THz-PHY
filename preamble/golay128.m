@@ -20,13 +20,30 @@ Gb = 2*b_bits - 1;
 n = (0:127);
 GaTx = Ga .*exp(1j*pi/2*n);
 GbTx = Gb .*exp(1j*pi/2*n);
-GaRx = conj(flip(GaTx));
-GbRx = conj(flip(GbTx));
+
+%% RRC 
+sps = 4;
+span = 8;
+rolloff = 0.25;
+RRC = rcosdesign(rolloff,span,sps,"sqrt");
+RRC = RRC / sqrt(sum(RRC.^2));
+RRC_delay = (length(RRC)-1)/2;
+GaTxUp = upsample(GaTx,sps);
+GbTxUp = upsample(GbTx,sps);
+GaTxRRC = conv(GaTxUp,RRC);
+GbTxRRC = conv(GbTxUp,RRC);
+GaMatch = conv(GaTxRRC,RRC);
+GbMatch = conv(GbTxRRC,RRC);
+
+
+%% 
+GaFilter = conj(flip(GaMatch));
+GbFilter = conj(flip(GbMatch));
 % y = conv(Ga,flip(Ga));
 % x = conv(Gb,flip(Gb));
 % test pi/2
-y = conv(GaTx,GaRx);
-x = conv(GbTx,GbRx);
+y = conv(GaMatch,GaFilter);
+x = conv(GbMatch,GbFilter);
 perfect_spike = abs(x + y);
 
 % 5. Plotting with precise limits
