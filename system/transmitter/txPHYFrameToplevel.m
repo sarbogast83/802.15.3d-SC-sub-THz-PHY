@@ -48,7 +48,7 @@ end
 payloadModulated = payloadbival .*exp(1j*pi/2*n'); 
 
 %% PW
-pilotWord = [1 1 0 1 0 1 1 1]; %0xEB
+pilotWord = [1 1 0 1 0 1 1 1]; %0xEB GOlay a code
 n = 0:7;
 PW = (2*pilotWord-1).*exp(1j*pi/2*n);
 % payloadModulated = (1:56*10).';
