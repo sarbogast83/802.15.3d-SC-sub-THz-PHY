@@ -1,0 +1,88 @@
+% steve Arbogast
+
+% Golay hardware sim
+clear; close all
+%% init 
+addpath("testWaveforms\")
+addpath('filters\')
+load('testWaveforms\TXtestSig1.mat') % this will load all need params
+load('phyShortPreamble.mat');
+Rchip = 1760e6;
+Tchip = 1/Rchip;
+FSample = Rchip * sps;
+Tsample = 1/FSample;
+
+%% golay 
+load('RRCfitler.mat')
+a128_hex = '5A5599963C33FFF00F00CCC36966AAA5';
+a_bits = cell2mat(arrayfun(@(c) dec2bin(hex2dec(c), 4), a128_hex, 'UniformOutput', false)) - '0';
+n = 0:length(a_bits)-1;
+Ga = 2*a_bits(:) - 1;
+Ga = Ga .*exp(1j*pi/2*n(:));
+GaUp = upsample(Ga,sps);
+GaRRC = conv(GaUp,RRC.h);
+GaMatch = conv(GaRRC,RRC.h);
+GaMatch = GaMatch(2*RRC.delay+1:end-2*RRC.delay);
+GaFilter = conj(flip(GaMatch));
+
+%% recovery 
+PreUp = upsample(preambleMod,sps);
+PreRRC = conv(PreUp,RRC.h);
+PreMatch = conv(PreRRC,RRC.h);
+
+% still at sps = 4
+
+%% frame detector
+% assume running RRC outfront
+threshold = computeThreshold(16.5);
+bufferSize = 128*sps;
+SFDDetected = false; % invCnt = 2
+inversionCnt = 0; % test for 2
+pntBuffer = 1;
+errorPhase = 0;
+PreMatch = PreMatch(100:end);
+while pntBuffer + bufferSize < length(PreMatch)
+    bufferIdx = pntBuffer : pntBuffer+bufferSize - 1; 
+    dataBuffer = PreMatch(bufferIdx);
+    % correct phase
+    % phaseCorrectedBuffer = dataBuffer .* exp(-1j * errorPhase);
+    phaseCorrectedBuffer = dataBuffer;
+    bufferCorr = conv(phaseCorrectedBuffer ,GaFilter);
+        plot(real(bufferCorr))
+        xline(512,'--g')
+        grid on 
+    [val,idx] = findpeaks(real(bufferCorr),"MinPeakHeight",threshold);
+    if ~isempty(val)
+        val = val(1);
+        if val > threshold
+            % phase
+            % measured_phase = angle(correlation(idx));
+            %% add pll for phase
+            % shift buffer
+            estTimingOffset = idx - bufferSize; 
+            pntBuffer = bufferIdx(end) + estTimingOffset + 1;
+        end % threshold
+    else 
+        pntBuffer = bufferIdx(end) + 1;
+        
+    end % Exists
+
+     
+    % pass out buffer
+    % bufferOut = dataBuffer(1:estTimingOffset);
+    % or pass pntbuffer to at SFD
+end 
+
+
+
+%% functions
+function threshold = computeThreshold(minCNR) % false pos threhold at min CNR
+            minCNR = 16.5; % temp hard code
+            L = 128;
+            scaleFactor = 20;
+            sidelobeEst = sqrt(L) * 4; % sps 
+            ebnoLin = 10^(minCNR / 10);
+            sigma = 1 / sqrt(2 * ebnoLin);
+            sigma = sigma * sqrt(128);
+            threshold =sidelobeEst + scaleFactor*(sigma * sqrt(-2* log(0.02))); % 2% FA
+        end %
