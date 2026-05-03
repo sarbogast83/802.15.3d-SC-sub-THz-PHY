@@ -36,19 +36,27 @@ GaMatch = conv(GaTxRRC,RRC);
 GbMatch = conv(GbTxRRC,RRC);
 
 
+
 %% 
 GaFilter = conj(flip(GaMatch));
 GbFilter = conj(flip(GbMatch));
+
+%% SFD
+GaSFD = -1*GaTx;
+GaSFDUp = upsample(GaSFD,sps);
+GaSFDRRC = conv(GaSFDUp,RRC);
+GaSFDMatch = conv(GaSFDRRC,RRC);
 % y = conv(Ga,flip(Ga));
 % x = conv(Gb,flip(Gb));
 % test pi/2
-y = conv(GaMatch,GaFilter);
+y = conv(GaSFDMatch,GaFilter);
 x = conv(GbMatch,GbFilter);
 perfect_spike = abs(x + y);
 
+%%
 % 5. Plotting with precise limits
 figure;
-plot(perfect_spike, 'LineWidth', 2);
+plot(imag(y), 'LineWidth', 2);
 grid on; 
 %%
 % save("golay128.mat","Ga","Gb")
