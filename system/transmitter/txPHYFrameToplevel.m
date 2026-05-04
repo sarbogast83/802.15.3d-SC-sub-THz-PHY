@@ -13,6 +13,7 @@ clear; close all
 addpath('../helper/')
 %% Data
 M = 1; % BPSK
+sps = 4;
 numBits = 2^14 * 8; % test value 2^14 octets 
 numPayloadSym = numBits / M; 
 payloadBits = randi([0 1],numPayloadSym*M,1);
@@ -70,21 +71,29 @@ phyHeaderFrame = headerEngine(phyHeaderFrame,macHeaderFrame);
 
 %% preamble
 load('phyShortPreamble.mat');
-
+% PreampleUp = upsample(preambleMod,sps);
 %% frame
 TxSymFrame = [preambleMod; phyHeaderFrame.frameSymsBlocked; payloadSymsBlocked];
-
+% TxSymFrame = [preambleMod];
 %% pulse Shape 
 % tested in mod>modtestScriptRRC
-sps = 4;
-span = 8;
-rolloff = 0.25;
-RRC = rcosdesign(rolloff,span,sps,"sqrt");
-RRC = RRC / sqrt(sum(RRC.^2));
-RRC_delay = (length(RRC)-1)/2;
-txSymFrameUp = upsample(TxSymFrame,sps);
-txSymFrameRRC = conv(RRC,txSymFrameUp); 
+% sps = 4;
+% span = 8;
+% rolloff = 0.25;
+% RRC = rcosdesign(rolloff,span,sps,"sqrt");
+% RRC = RRC / sqrt(sum(RRC.^2));
+% RRC_delay = (length(RRC)-1)/2;
+load('RRCfitler.mat')
+txSymFrameUp = upsample(TxSymFrame,RRC.sps);
+txSymFrameRRC = conv(RRC.h,txSymFrameUp); 
 
+
+%% test
+% load("GaFilter.mat")
+% txmatch = conv(txSymFrameRRC,RRC.h);
+% detect = conv(txmatch,GaFilter);
+% figure
+% plot(abs(detect))
 %% Save
 
 [filename, folderpath] = uiputfile('*.mat', 'Save Your Variables');
