@@ -27,19 +27,21 @@ GaMatch = GaMatch(2*RRC.delay+1:end-2*RRC.delay);
 GaFilter = conj(flip(GaMatch));
 
 %% received signal
-sro = comm.SampleRateOffset('Offset', 60); %% in ppm; system max 60
+CNR = 0; % dB 
+sro = comm.SampleRateOffset('Offset', 0); %% in ppm; system max 60
 vfd = dsp.VariableFractionalDelay;
 PreUp = upsample(preambleMod,sps);
 PreRRC = conv(PreUp,RRC.h);
-% PreRRCoffset = sro(PreRRC); 
-PreRRCoffset = vfd(PreRRC,0); 
-PreMatch = conv(PreRRC,RRC.h);
+noisyPre = awgnNoise(CNR,PreRRC);
+PreRRCoffset = sro(noisyPre); 
+PreRRCoffset = vfd(PreRRCoffset,0); 
+PreMatch = conv(PreRRCoffset,RRC.h);
 
 % still at sps = 4
 
 %% frame detector
 % assume running RRC outfront
-threshold = computeThreshold(16.5);
+threshold = computeThreshold(CNR);
 bufferSize = 128*sps;
 SFDDetected = false; % invCnt = 2
 inversionCnt = 0; % test for 2
@@ -49,7 +51,7 @@ priorPhase = 0;
 phasePattern = [2 2 2 2];
 % PreMatch = PreMatch(100:end);
 while pntBuffer + bufferSize < length(PreMatch)
-    bufferIdx = pntBuffer : pntBuffer+bufferSize - 1; 
+    bufferIdx = (pntBuffer : pntBuffer+bufferSize - 1); 
     dataBuffer = PreMatch(bufferIdx);
     % correct phase
     % phaseCorrectedBuffer = dataBuffer .* exp(-1j * errorPhase);
@@ -90,9 +92,9 @@ end
 
 %% functions
 function threshold = computeThreshold(minCNR) % false pos threhold at min CNR
-            minCNR = 16.5; % temp hard code
+            % minCNR = 16.5; % temp hard code
             L = 128;
-            scaleFactor = 20;
+            scaleFactor = 10;
             sidelobeEst = sqrt(L) * 4; % sps 
             ebnoLin = 10^(minCNR / 10);
             sigma = 1 / sqrt(2 * ebnoLin);
@@ -113,4 +115,14 @@ function SFDbit =  golayDespread(data,golay)
     else
         SFDbit = 0;
     end
+end
+function noisySig = awgnNoise(CNR,sig)
+   numSamples = length(sig);
+   ebnoLin = 10.^(CNR/10);
+   realNoise = randn(numSamples ,1);
+   imagNoise = randn(numSamples ,1);
+   noiseVec = realNoise + 1j*imagNoise;
+   noiseScaler = 1./sqrt(2*ebnoLin);
+   scaledNoise = noiseScaler*noiseVec;
+   noisySig = sig + scaledNoise;
 end
