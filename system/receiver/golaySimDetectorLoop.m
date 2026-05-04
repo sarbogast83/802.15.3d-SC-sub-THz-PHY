@@ -5,6 +5,7 @@ clear; close all
 %% init
 
 addpath("testWaveforms\")
+addpath('..\helper\')
 addpath('filters\')
 load('testWaveforms\TXtestSig1.mat') % this will load all need params
 load('phyShortPreamble.mat');
@@ -27,14 +28,16 @@ GaMatch = GaMatch(2*RRC.delay+1:end-2*RRC.delay);
 GaFilter = conj(flip(GaMatch));
 
 %% received signal
-CNR = 0; % dB 
-sro = comm.SampleRateOffset('Offset', 0); %% in ppm; system max 60
-vfd = dsp.VariableFractionalDelay;
+CNR = 100; % dB 
+sroError = comm.SampleRateOffset('Offset', 0); %% in ppm; system max 60
+vfdError = dsp.VariableFractionalDelay;
 PreUp = upsample(preambleMod,sps);
-PreRRC = conv(PreUp,RRC.h);
-noisyPre = awgnNoise(CNR,PreRRC);
-PreRRCoffset = sro(noisyPre); 
-PreRRCoffset = vfd(PreRRCoffset,0); 
+PreRRC = conv(PreUp,RRC.h); % **** sig no error ****
+noisyPre = awgnNoise(CNR,PreRRC); % add noise
+noisyPre = PreRRC;
+PreRRCoffset = sroError(noisyPre); % add clock offset, accumulates
+PreRRCoffset = vfdError(PreRRCoffset,0); % add const timing offset
+% PreRRCFreqOffset = PreRRCoffset .* exp(-1j*2*pi*freqOffset * n); % 
 PreMatch = conv(PreRRCoffset,RRC.h);
 
 % still at sps = 4
@@ -42,6 +45,7 @@ PreMatch = conv(PreRRCoffset,RRC.h);
 %% frame detector
 % assume running RRC outfront
 threshold = computeThreshold(CNR);
+threshold = 150;
 bufferSize = 128*sps;
 SFDDetected = false; % invCnt = 2
 inversionCnt = 0; % test for 2
@@ -49,10 +53,12 @@ pntBuffer = 1;
 errorPhase = 0;
 priorPhase = 0;
 phasePattern = [2 2 2 2];
+vfd = dsp.VariableFractionalDelay('InterpolationMethod', 'Farrow');
 % PreMatch = PreMatch(100:end);
 while pntBuffer + bufferSize < length(PreMatch)
     bufferIdx = (pntBuffer : pntBuffer+bufferSize - 1); 
     dataBuffer = PreMatch(bufferIdx);
+    % timedBuffer = vfd(rawBuffer, estDelay);
     % correct phase
     % phaseCorrectedBuffer = dataBuffer .* exp(-1j * errorPhase);
     phaseCorrectedBuffer = dataBuffer;
@@ -60,9 +66,11 @@ while pntBuffer + bufferSize < length(PreMatch)
         plot(real(bufferCorr),'-o')
         xline(512,'--g')
         grid on 
-    [val,idx] = findpeaks(abs(bufferCorr),"MinPeakHeight",threshold);
-    if ~isempty(val)
-        val = val(1);
+    % [val,idx] = findpeaks(abs(bufferCorr),"MinPeakHeight",threshold);
+    [val,idx] = max(abs(bufferCorr));
+    % if ~isempty(val)
+    % 
+    %     val = val(1);
         if val > threshold
             % phase
             currentPhase = angle(bufferCorr(idx));
@@ -71,9 +79,15 @@ while pntBuffer + bufferSize < length(PreMatch)
             SFDDetected = isequal(phasePattern, [1 1 -1 -1]);
 
             % timing
+            % https://ccrma.stanford.edu/~jos/sasp/Quadratic_Interpolation_Spectral_Peaks.html
+            % Quadratic interp
+            alpha = abs(bufferCorr(idx - 1));
+            beta  = abs(bufferCorr(idx));
+            gamma = abs(bufferCorr(idx + 1));
+            fracOffset = 0.5 * (alpha - gamma) / (alpha - 2*beta + gamma);
             estTimingOffset = idx - bufferSize; 
             pntBuffer = bufferIdx(end) + estTimingOffset + 1;
-        end % threshold
+        % end % threshold
     else 
         pntBuffer = bufferIdx(end) + 1;
         
