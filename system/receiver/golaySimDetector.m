@@ -22,12 +22,15 @@ Ga = Ga .*exp(1j*pi/2*n(:));
 GaUp = upsample(Ga,sps);
 GaRRC = conv(GaUp,RRC.h);
 GaMatch = conv(GaRRC,RRC.h);
+GaMatch = GaMatch(2*RRC.delay+1:end-2*RRC.delay);
 GaFilter = conj(flip(GaMatch));
 
 %% recovery 
+CNR = 0; % dB 
 PreUp = upsample(preambleMod,sps);
 PreRRC = conv(PreUp,RRC.h);
-PreMatch = conv(PreRRC,RRC.h);
+noisyPre = awgnNoise(CNR,PreRRC);
+PreMatch = conv(noisyPre,RRC.h);
 
 % still at sps = 4
 
@@ -35,3 +38,15 @@ PreMatch = conv(PreRRC,RRC.h);
 detectPeaks = conv(PreMatch,GaFilter);
 figure
 plot(real(detectPeaks))
+
+
+function noisySig = awgnNoise(CNR,sig)
+   numSamples = length(sig);
+   ebnoLin = 10.^(CNR/10);
+   realNoise = randn(numSamples ,1);
+   imagNoise = randn(numSamples ,1);
+   noiseVec = realNoise + 1j*imagNoise;
+   noiseScaler = 1./sqrt(2*ebnoLin);
+   scaledNoise = noiseScaler*noiseVec;
+   noisySig = sig + scaledNoise;
+end
