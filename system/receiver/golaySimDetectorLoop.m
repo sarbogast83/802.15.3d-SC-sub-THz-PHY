@@ -2,7 +2,8 @@
 
 % Golay hardware sim
 clear; close all
-%% init 
+%% init
+
 addpath("testWaveforms\")
 addpath('filters\')
 load('testWaveforms\TXtestSig1.mat') % this will load all need params
@@ -18,16 +19,20 @@ a128_hex = '5A5599963C33FFF00F00CCC36966AAA5';
 a_bits = cell2mat(arrayfun(@(c) dec2bin(hex2dec(c), 4), a128_hex, 'UniformOutput', false)) - '0';
 n = 0:length(a_bits)-1;
 Ga = 2*a_bits(:) - 1;
-Ga = Ga .*exp(1j*pi/2*n(:));
-GaUp = upsample(Ga,sps);
+GaRotated = Ga .*exp(1j*pi/2*n(:));
+GaUp = upsample(GaRotated,sps);
 GaRRC = conv(GaUp,RRC.h);
 GaMatch = conv(GaRRC,RRC.h);
 GaMatch = GaMatch(2*RRC.delay+1:end-2*RRC.delay);
 GaFilter = conj(flip(GaMatch));
 
-%% recovery 
+%% received signal
+sro = comm.SampleRateOffset('Offset', 60); %% in ppm; system max 60
+vfd = dsp.VariableFractionalDelay;
 PreUp = upsample(preambleMod,sps);
 PreRRC = conv(PreUp,RRC.h);
+% PreRRCoffset = sro(PreRRC); 
+PreRRCoffset = vfd(PreRRC,0); 
 PreMatch = conv(PreRRC,RRC.h);
 
 % still at sps = 4
@@ -40,7 +45,9 @@ SFDDetected = false; % invCnt = 2
 inversionCnt = 0; % test for 2
 pntBuffer = 1;
 errorPhase = 0;
-PreMatch = PreMatch(100:end);
+priorPhase = 0;
+phasePattern = [2 2 2 2];
+% PreMatch = PreMatch(100:end);
 while pntBuffer + bufferSize < length(PreMatch)
     bufferIdx = pntBuffer : pntBuffer+bufferSize - 1; 
     dataBuffer = PreMatch(bufferIdx);
@@ -48,17 +55,20 @@ while pntBuffer + bufferSize < length(PreMatch)
     % phaseCorrectedBuffer = dataBuffer .* exp(-1j * errorPhase);
     phaseCorrectedBuffer = dataBuffer;
     bufferCorr = conv(phaseCorrectedBuffer ,GaFilter);
-        plot(real(bufferCorr))
+        plot(real(bufferCorr),'-o')
         xline(512,'--g')
         grid on 
-    [val,idx] = findpeaks(real(bufferCorr),"MinPeakHeight",threshold);
+    [val,idx] = findpeaks(abs(bufferCorr),"MinPeakHeight",threshold);
     if ~isempty(val)
         val = val(1);
         if val > threshold
             % phase
-            % measured_phase = angle(correlation(idx));
-            %% add pll for phase
-            % shift buffer
+            currentPhase = angle(bufferCorr(idx));
+            SFDval = golayDespread(dataBuffer,Ga);
+            phasePattern = [phasePattern(2:end) SFDval];
+            SFDDetected = isequal(phasePattern, [1 1 -1 -1]);
+
+            % timing
             estTimingOffset = idx - bufferSize; 
             pntBuffer = bufferIdx(end) + estTimingOffset + 1;
         end % threshold
@@ -66,8 +76,11 @@ while pntBuffer + bufferSize < length(PreMatch)
         pntBuffer = bufferIdx(end) + 1;
         
     end % Exists
-
-     
+    
+    if SFDDetected
+        CESstart = pntBuffer;
+        break
+    end
     % pass out buffer
     % bufferOut = dataBuffer(1:estTimingOffset);
     % or pass pntbuffer to at SFD
@@ -86,3 +99,18 @@ function threshold = computeThreshold(minCNR) % false pos threhold at min CNR
             sigma = sigma * sqrt(128);
             threshold =sidelobeEst + scaleFactor*(sigma * sqrt(-2* log(0.02))); % 2% FA
         end %
+
+function SFDbit =  golayDespread(data,golay)
+    data = data(:);
+    dataDown = downsample(data,4);
+    n = (0:length(dataDown)-1)';
+    dataDerotate = dataDown.*exp(-1j*pi/2.*n);
+    intDump = sum(dataDerotate.*golay);
+    if real(intDump) > 120
+        SFDbit = 1;
+    elseif real(intDump) < -120
+        SFDbit = -1;
+    else
+        SFDbit = 0;
+    end
+end
