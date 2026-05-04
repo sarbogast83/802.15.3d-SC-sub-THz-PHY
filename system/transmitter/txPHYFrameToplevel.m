@@ -73,8 +73,8 @@ phyHeaderFrame = headerEngine(phyHeaderFrame,macHeaderFrame);
 load('phyShortPreamble.mat');
 % PreampleUp = upsample(preambleMod,sps);
 %% frame
-TxSymFrame = [preambleMod; phyHeaderFrame.frameSymsBlocked; payloadSymsBlocked];
-% TxSymFrame = [preambleMod];
+% TxSymFrame = [preambleMod; phyHeaderFrame.frameSymsBlocked; payloadSymsBlocked];
+TxSymFrame = [preambleMod];
 %% pulse Shape 
 % tested in mod>modtestScriptRRC
 % sps = 4;
