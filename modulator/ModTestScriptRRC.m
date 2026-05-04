@@ -1,34 +1,59 @@
 
 
-clear
+clear; close all
 %%
-numBits = 1e6;
+numBits = 2^14*8;
 bits = randi([0 1],numBits,1);
-EbNodB = -5:10;
+padding = 20;
+bits = [bits; zeros(padding,1)];
+EbNodB = -5:15;
 sps = 4;
 span = 8;
 rolloff = 0.25;
+sroError = comm.SampleRateOffset('Offset', 0); %% in ppm; system max 60
+vfdError = dsp.VariableFractionalDelay;
+vfdOffset = 0;
+freqOffset = 16e3;
+Fsym = 1.76e9;
+
+%% RRC
 RRC = rcosdesign(rolloff,span,sps,"sqrt");
 RRC = RRC / sqrt(sum(RRC.^2));
 RRC_delay = (length(RRC)-1)/2;
-numSamps = numBits*sps;
+numSamps = length(bits)*sps;
+
 %% modulate
 % BPSK
     bpskSyms = bits * 2 - 1; % mod 
-    n = (0:numBits-1)';
+    n = (0:length(bpskSyms)-1)';
     bpskSymsRotated = bpskSyms.*exp(1j*n*pi/2); % rotate
     bpskSymsUp = upsample(bpskSymsRotated,sps);
     bpskSymsRRC = conv(RRC,bpskSymsUp); 
     bpskSymsRRC = bpskSymsRRC(RRC_delay+1:end-RRC_delay);
-    testMask(bpskSymsRRC,sps);
+    
+    bpskCLKoffset = sroError(bpskSymsRRC); % add clock offset, accumulates
+    bpskCLKoffset = bpskCLKoffset(26:end);
+    bpskSymoffset = vfdError(bpskCLKoffset,vfdOffset); % add const timing offset
+    % bpskSymoffset = bpskSymoffset(3:end);
+    t = (0:length(bpskSymoffset)-1)'/Fsym/sps;
+    bpskFreqOffset = bpskSymoffset .* exp(-1j*2*pi*freqOffset * t); % 
+
+    % testMask(bpskFreqOffset,sps);
 % QPSK   
     qpskSyms = pskmod(bits,4,-pi/2,"gray","InputType","bit"); % note -pi/e rotation for standard
-    n = (0:numBits/2-1)';
+    n = (0:length(qpskSyms)-1)';
     qpskSymsRotated =  qpskSyms.*exp(1j*n*pi/2); 
     qpskSymsUp = upsample(qpskSymsRotated,sps);
     qpskSymsRRC = conv(RRC,qpskSymsUp);
     qpskSymsRRC = qpskSymsRRC(RRC_delay+1:end-RRC_delay);
-    testMask(qpskSymsRRC,sps);
+    
+    qpskCLKoffset = sroError(qpskSymsRRC); % add clock offset, accumulates
+    qpskCLKoffset = qpskCLKoffset(26:end);
+    qpskSymoffset = vfdError(qpskCLKoffset,vfdOffset); % add const timing offset
+    t = (0:length(qpskSymoffset)-1)'/Fsym/sps;
+    qpskFreqOffset = qpskSymoffset .* exp(-1j*2*pi*freqOffset * t); %
+
+    % testMask(qpskFreqOffset,sps);
 
 %% sys obj demodulator 
 bpskDemod = piOverTwoDemod(symOrder=2);
@@ -36,8 +61,9 @@ qpskDemod = piOverTwoDemod(symOrder=4);
 
 %% noise
 ebnoLin = 10.^(EbNodB/10);
-realNoise = randn(numSamps,1);
-imagNoise = randn(numSamps,1);
+L = length(bpskFreqOffset);
+realNoise = randn(L,1);
+imagNoise = randn(L,1);
 noiseVec = realNoise + 1j*imagNoise;
 noiseScaler = sqrt(1./(2*ebnoLin));
 ber_theoretical = 0.5 * erfc(sqrt(ebnoLin));
@@ -45,8 +71,8 @@ bpskBER = zeros(1,length(EbNodB));
 qpskBER = zeros(1,length(EbNodB));
 for i = 1:length(ebnoLin)
    scaledNoiseVec = noiseScaler(i)*noiseVec;
-   noisyBpskSymsRotated = bpskSymsRRC + scaledNoiseVec;
-   noisyQpskSymsRotated = qpskSymsRRC + scaledNoiseVec(1:numSamps/2)/sqrt(2);
+   noisyBpskSymsRotated = bpskFreqOffset + scaledNoiseVec(1:length(bpskFreqOffset));
+   noisyQpskSymsRotated = qpskFreqOffset + scaledNoiseVec(1:length(qpskFreqOffset))/sqrt(2);
     
 
    %% match adn downsample %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -81,7 +107,8 @@ for i = 1:length(ebnoLin)
 
       symIdx = symIdx + 1;  
    end % buffer test
-   bpskBERbuffer = sum(receivedBPSKbits~=bits)/numBits; 
+   receivedBPSKbits = receivedBPSKbits(1:numBits); % chop off zeros
+   bpskBERbuffer = sum(receivedBPSKbits~=bits(1:numBits))/numBits; 
    bpskBER(i) = bpskBERbuffer;
    
    
@@ -104,7 +131,7 @@ for i = 1:length(ebnoLin)
       
     symIdx = symIdx + 1;  
    end % buffer test
-   qpskBERbuffer = sum(receivedQPSKbits~=bits)/numBits;
+   qpskBERbuffer = sum(receivedQPSKbits(1:numBits)~=bits(1:numBits))/numBits;
    qpskBER(i) = qpskBERbuffer;
    reset(bpskDemod); % clear n
    reset(qpskDemod);
@@ -136,7 +163,7 @@ function testMask(TxSig,sps)
     plot(f/1e6, psd_norm,'-b'); 
     grid on;
     
-    yline([-20 -25 -30], '--g', 'Color');
+    yline([-20 -25 -30], '--g');
     title('Transmit Spectrum');
     legend('Mask','Spectrum')
     ylim([-50 5]);
