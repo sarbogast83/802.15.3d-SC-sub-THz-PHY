@@ -36,7 +36,7 @@ PreRRC = conv(PreUp,RRC.h); % **** sig no error ****
 noisyPre = awgnNoise(CNR,PreRRC); % add noise
 noisyPre = PreRRC;
 PreRRCoffset = sroError(noisyPre); % add clock offset, accumulates
-PreRRCoffset = vfdError(PreRRCoffset,0); % add const timing offset
+PreRRCoffset = vfdError(PreRRCoffset,0.0); % add const timing offset
 % PreRRCFreqOffset = PreRRCoffset .* exp(-1j*2*pi*freqOffset * n); % 
 PreMatch = conv(PreRRCoffset,RRC.h);
 
@@ -50,18 +50,22 @@ bufferSize = 128*sps;
 SFDDetected = false; % invCnt = 2
 inversionCnt = 0; % test for 2
 pntBuffer = 1;
-errorPhase = 0;
-priorPhase = 0;
+fracTimingOffset = 0;
+phaseOffset = 0;
 phasePattern = [2 2 2 2];
+alpha = .75; % drive phase and timing corrction
+timingErrorPlot = [];
 vfd = dsp.VariableFractionalDelay('InterpolationMethod', 'Farrow');
+vfdGrpDelay = vfd.FilterLength/2;
 % PreMatch = PreMatch(100:end);
 while pntBuffer + bufferSize < length(PreMatch)
-    bufferIdx = (pntBuffer : pntBuffer+bufferSize - 1); 
+    bufferIdx = (pntBuffer : pntBuffer+bufferSize - 1 + vfdGrpDelay); 
     dataBuffer = PreMatch(bufferIdx);
-    % timedBuffer = vfd(rawBuffer, estDelay);
+    timedBuffer = vfd(dataBuffer, -fracTimingOffset);
+    timedBuffer = timedBuffer(vfdGrpDelay+1:end); % grpdelay
     % correct phase
-    % phaseCorrectedBuffer = dataBuffer .* exp(-1j * errorPhase);
-    phaseCorrectedBuffer = dataBuffer;
+    % phaseCorrectedBuffer = timedBuffer .* exp(-1j * errorPhase);
+    phaseCorrectedBuffer = timedBuffer;
     bufferCorr = conv(phaseCorrectedBuffer ,GaFilter);
         plot(real(bufferCorr),'-o')
         xline(512,'--g')
@@ -73,25 +77,30 @@ while pntBuffer + bufferSize < length(PreMatch)
     %     val = val(1);
         if val > threshold
             % phase
-            currentPhase = angle(bufferCorr(idx));
-            SFDval = golayDespread(dataBuffer,Ga);
+            phaseError = angle(bufferCorr(idx));
+            phaseOffset = phaseOffset + alpha * phaseError; % interate
+            SFDval = golayDespread(phaseCorrectedBuffer,Ga);
             phasePattern = [phasePattern(2:end) SFDval];
             SFDDetected = isequal(phasePattern, [1 1 -1 -1]);
 
             % timing
             % https://ccrma.stanford.edu/~jos/sasp/Quadratic_Interpolation_Spectral_Peaks.html
             % Quadratic interp
-            alpha = abs(bufferCorr(idx - 1));
-            beta  = abs(bufferCorr(idx));
-            gamma = abs(bufferCorr(idx + 1));
-            fracOffset = 0.5 * (alpha - gamma) / (alpha - 2*beta + gamma);
-            estTimingOffset = idx - bufferSize; 
-            pntBuffer = bufferIdx(end) + estTimingOffset + 1;
+            Qalpha = abs(bufferCorr(idx - 1));
+            Qbeta  = abs(bufferCorr(idx));
+            Qgamma = abs(bufferCorr(idx + 1));
+            fracTimingError = 0.5 * (Qalpha - Qgamma) / (Qalpha - 2*Qbeta + Qgamma);
+            courseTimingError = idx - bufferSize;
+            fracTimingOffset = fracTimingOffset + alpha * fracTimingError; % integrate
+            % not working below 0.5, blows up, likely due to group delay
+            % and course timing negotiaiton
+            timingErrorPlot(end+1) = fracTimingOffset ;
+            pntBuffer = bufferIdx(end) + courseTimingError + 1;
         % end % threshold
-    else 
-        pntBuffer = bufferIdx(end) + 1;
-        
-    end % Exists
+        else 
+            pntBuffer = bufferIdx(end) + 1;
+            
+        end % Exists
     
     if SFDDetected
         CESstart = pntBuffer;
@@ -102,7 +111,10 @@ while pntBuffer + bufferSize < length(PreMatch)
     % or pass pntbuffer to at SFD
 end 
 
-
+%% end main loop for integration
+% plot timing error correction
+% figure
+% plot(timingErrorPlot)
 
 %% functions
 function threshold = computeThreshold(minCNR) % false pos threhold at min CNR
@@ -122,9 +134,9 @@ function SFDbit =  golayDespread(data,golay)
     n = (0:length(dataDown)-1)';
     dataDerotate = dataDown.*exp(-1j*pi/2.*n);
     intDump = sum(dataDerotate.*golay);
-    if real(intDump) > 120
+    if real(intDump) > 128/2
         SFDbit = 1;
-    elseif real(intDump) < -120
+    elseif real(intDump) < -128/2
         SFDbit = -1;
     else
         SFDbit = 0;
