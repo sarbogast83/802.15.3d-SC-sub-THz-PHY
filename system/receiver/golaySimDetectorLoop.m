@@ -8,7 +8,8 @@ addpath("testWaveforms\")
 addpath('..\helper\')
 addpath('filters\')
 load('testWaveforms\TXtestSig1.mat') % this will load all need params
-load('phyShortPreamble.mat');
+% load('phyShortPreamble.mat');
+load('testWaveforms\testPreamble.mat')
 Rchip = 1760e6;
 Tchip = 1/Rchip;
 FSample = Rchip * sps;
@@ -29,21 +30,22 @@ GaFilter = conj(flip(GaMatch));
 
 %% received signal
 CNR = 100; % dB 
-sroError = comm.SampleRateOffset('Offset', 0); %% in ppm; system max 60
-vfdError = dsp.VariableFractionalDelay;
-PreUp = upsample(preambleMod,sps);
-PreRRC = conv(PreUp,RRC.h); % **** sig no error ****
-noisyPre = awgnNoise(CNR,PreRRC); % add noise
-noisyPre = PreRRC;
-PreRRCoffset = sroError(noisyPre); % add clock offset, accumulates
-PreRRCoffset = vfdError(PreRRCoffset,0.0); % add const timing offset
+% sroError = comm.SampleRateOffset('Offset', 0); %% in ppm; system max 60
+% vfdError = dsp.VariableFractionalDelay;
+% PreUp = upsample(preambleMod,sps);
+% PreRRC = conv(PreUp,RRC.h); % **** sig no error ****
+% noisyPre = awgnNoise(CNR,PreRRC); % add noise
+% noisyPre = PreRRC;
+% PreRRCoffset = sroError(noisyPre); % add clock offset, accumulates
+% PreRRCoffset = vfdError(PreRRCoffset,0.0); % add const timing offset
 % PreRRCFreqOffset = PreRRCoffset .* exp(-1j*2*pi*freqOffset * n); % 
-PreMatch = conv(PreRRCoffset,RRC.h);
+PreMatch = conv(txSymFrameRRC,RRC.h);
 
 % still at sps = 4
 
 %% frame detector
 % assume running RRC outfront
+detectCNT = 0
 threshold = computeThreshold(CNR);
 threshold = 150;
 bufferSize = 128*sps;
@@ -52,6 +54,8 @@ inversionCnt = 0; % test for 2
 pntBuffer = 1;
 fracTimingOffset = 0;
 phaseOffset = 0;
+phaseError = 0;
+phaseErrorAccum = [];
 phasePattern = [2 2 2 2];
 alpha = .75; % drive phase and timing corrction
 timingErrorPlot = [];
@@ -64,8 +68,8 @@ while pntBuffer + bufferSize < length(PreMatch)
     timedBuffer = vfd(dataBuffer, -fracTimingOffset);
     timedBuffer = timedBuffer(vfdGrpDelay+1:end); % grpdelay
     % correct phase
-    % phaseCorrectedBuffer = timedBuffer .* exp(-1j * errorPhase);
-    phaseCorrectedBuffer = timedBuffer;
+    phaseCorrectedBuffer = timedBuffer .* exp(-1j * phaseError);
+    % phaseCorrectedBuffer = timedBuffer;
     bufferCorr = conv(phaseCorrectedBuffer ,GaFilter);
         plot(real(bufferCorr),'-o')
         xline(512,'--g')
@@ -76,9 +80,11 @@ while pntBuffer + bufferSize < length(PreMatch)
     % 
     %     val = val(1);
         if val > threshold
+            detectCNT = detectCNT + 1;
             % phase
-            phaseError = angle(bufferCorr(idx));
-            phaseOffset = phaseOffset + alpha * phaseError; % interate
+            phaseError = angle(bufferCorr(idx))
+            phaseOffset = phaseOffset + alpha * phaseError % interate
+            phaseErrorAccum = [phaseErrorAccum phaseOffset];
             SFDval = golayDespread(phaseCorrectedBuffer,Ga);
             phasePattern = [phasePattern(2:end) SFDval];
             SFDDetected = isequal(phasePattern, [1 1 -1 -1]);
@@ -94,7 +100,7 @@ while pntBuffer + bufferSize < length(PreMatch)
             fracTimingOffset = fracTimingOffset + alpha * fracTimingError; % integrate
             % not working below 0.5, blows up, likely due to group delay
             % and course timing negotiaiton
-            timingErrorPlot(end+1) = fracTimingOffset ;
+            % timingErrorPlot(end+1) = fracTimingOffset ;
             pntBuffer = bufferIdx(end) + courseTimingError + 1;
         % end % threshold
         else 
@@ -113,8 +119,8 @@ end
 
 %% end main loop for integration
 % plot timing error correction
-% figure
-% plot(timingErrorPlot)
+figure
+plot(phaseErrorAccum)
 
 %% functions
 function threshold = computeThreshold(minCNR) % false pos threhold at min CNR
