@@ -83,11 +83,20 @@ File Stucture
 	
 	
 	- preamble 
+		scripts for building and testing the full preamble 
 	
 	
 	
 	
 	- modulator
+		scipts for mod/demod of pi/2 BPSK and QPSK
+		
+		- modtest: simple test of pi/2 mod/demod with theory comparison 
+		- modtestSciptRC: test pulse shape and match fitler, confirm sprectrum
+		- modTestScriptSysObj; test system object demodulator
+		- modTestSysObjBuffer: test buffering data at andom intervals, ensure obj holds sym cont for derotation 
+		- piOverTwoDemod
+			system object to handle the demodulation poecess. Tracks symbol count for proper derotation. 
 	
 	
 	
